@@ -3,8 +3,7 @@
 (require scheme/contract
          (prefix-in local: "local-android-packager.ss")
          (prefix-in remote: "server-side-packager/client-side-packager.ss")
-         "../config.ss")
-
+         "config.rkt")
 
 
 ;; local-android-ready?: -> boolean
@@ -18,13 +17,13 @@
 ;; Either tries to use the local android packager; if the
 ;; resources aren't available,
 ;; then tries to use the web service.
-(define (build-android-package program-name program-path)
+(define (build-android-package program-name resources)
   (cond
     [(local-android-ready?)
-     (local:build-android-package program-name program-path)]
+     (local:build-android-package program-name resources)]
     [else
-     (remote:build-android-package program-name program-path)]))
+     (remote:build-android-package program-name resources)]))
 
 
 (provide/contract
- [build-android-package (string? path? . -> . bytes?)])
+ [build-android-package (string? (listof (is-a?/c resource<%>)) . -> . bytes?)])

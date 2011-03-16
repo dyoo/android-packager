@@ -6,39 +6,24 @@
 
 ;; A resource is something that should be associated to a program, such
 ;; as source code, HTML, images, and music files.
+(define-struct resource (relative-path  ;; string
+                         bytes          ;; bytes
+                         )
+  #:transparent)
 
-
-(define resource<%>
-  (interface () 
-    save!      ;; path -> void    
-    get-name   ;; -> string
-    get-bytes  ;; -> bytes
-    ))
-
-(define named-bytes-resource%
-  (class* object% (resource<%>)
-    (super-new)
-    (init-field name)
-    (init-field bytes)
-    
-    (define/public (save! a-path)
-      (call-with-output-file (build-path a-path name)
-        (lambda (op)
-          (write-bytes bytes op))))
-    
-    (define/public (get-name)
-      name)
-    
-    (define/public (get-bytes)
-      bytes)))
+;; resource-save!: resource path -> void
+;; Write out the resource to disk.
+(define (resource-save! a-resource a-root-path)
+  (call-with-output-file (build-path a-root-path (resource-relative-path a-resource))
+    (lambda (op)
+      (write-bytes (resource-bytes a-resource) op))))
 
 
 ;; resource->sexp: resource -> s-expression
 (define (resource->sexp a-resource)
   (list 'resource
-        (send a-resource get-name)
-        (send a-resource get-bytes)))
-
+        (resource-relative-path a-resource)
+        (resource-bytes a-resource)))
 
 ;; sexp->resource: s-expression -> resource
 (define (sexp->resource resource-sexp)
@@ -46,13 +31,12 @@
     [(list 'resource 
            (and name (? string?))
            (and bytes (? bytes?)))
-     (new named-bytes-resource% 
-       [name name]
-       [bytes bytes])]))
+     (make-resource name bytes)]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(provide/contract [resource<%> interface?]
-                  [named-bytes-resource% class?]
-                  [resource->sexp ((is-a?/c resource<%>) . -> . any)]
-                  [sexp->resource (any/c . -> . (is-a?/c resource<%>))])
+(provide/contract [struct resource ([relative-path string?]
+                                    [bytes bytes?])]
+                  [resource->sexp (resource? . -> . any)]
+                  [sexp->resource (any/c . -> . resource?)]
+                  [resource-save! (resource? path-string? . -> . any)])
