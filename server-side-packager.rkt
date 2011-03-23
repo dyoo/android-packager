@@ -20,7 +20,11 @@
 ;; Should throw an error page.  If error during compilation, should include the domified
 ;; error structure.
 ;;
+;; Parameters
 ;;
+;;     n : string.  default "program" name.
+;;     ps : string.  Repeatable.  Permission
+;;     r : resource-sexp-string.  Repeatable
 
 
 (define-runtime-path HTDOCS-PATH "htdocs")
@@ -70,8 +74,8 @@
 ;; Extracts the name from the request
 (define (parse-program-name req)
   (cond
-    [(exists-binding? 'name (request-bindings req))
-     (extract-binding/single 'name (request-bindings req))]
+    [(exists-binding? 'n (request-bindings req))
+     (extract-binding/single 'n (request-bindings req))]
     [else
      "program"]))
 
@@ -80,18 +84,18 @@
 ;; Produces the list of Android permissions required by this package.
 (define (parse-permissions req)
   (cond
-    [(exists-binding? 'permission (request-bindings req))
-     (extract-bindings 'permission req)]
+    [(exists-binding? 'ps (request-bindings req))
+     (extract-bindings 'ps req)]
     [else
      '()]))
      
 
 ;; parse-resources: bindings -> (listof resource)
 (define (parse-resources req)
-  (cond [(exists-binding? 'resource (request-bindings req))
+  (cond [(exists-binding? 'r (request-bindings req))
          (map (lambda (val)
                 (sexp->resource (read (open-input-string val))))
-              (extract-bindings 'resource (request-bindings req)))]
+              (extract-bindings 'r (request-bindings req)))]
         [else
          empty]))
 
