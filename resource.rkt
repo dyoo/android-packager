@@ -33,6 +33,9 @@
            (and bytes (? bytes?)))
      (make-resource name bytes)]))
 
+
+
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (provide/contract [struct resource ([relative-path string?]

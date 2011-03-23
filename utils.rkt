@@ -1,6 +1,7 @@
 #lang racket/base
 (require racket/contract
          racket/file
+	 file/gzip
          (prefix-in 19: srfi/19))
 
 (provide/contract [copy-directory/files* (path-string? path-string? . -> . any)]
@@ -11,7 +12,10 @@
                   [get-input-port-bytes (input-port? . -> . bytes?)]
                   [now-date-string (-> string?)]
                   [string->date (string? . -> . date?)]
-                  [with-temporary-directory ((path? . -> . any) . -> . any)])
+                  [with-temporary-directory ((path? . -> . any) . -> . any)]
+
+		  [gzip-bytes (bytes? . -> . bytes?)]
+		  [gunzip-bytes (bytes? . -> . bytes?)])
 
 
 ;; copy-or-overwrite-file: path path -> void
@@ -127,3 +131,18 @@
   (apply string-append
          (map string-titlecase (regexp-split #px"[\\s]+" 
                                              (regexp-replace* #px"[^\\s\\w]+" name " ")))))
+
+
+
+
+
+(define (gzip-bytes bytes)
+  (let ([op (open-output-bytes)])
+    (gzip-through-ports (open-input-bytes bytes) op #f 0)
+    (get-output-bytes op)))
+
+
+(define (gunzip-bytes bytes)
+  (let ([op (open-output-bytes)])
+    (deflate (open-input-bytes bytes) op)
+    (get-output-bytes op)))
