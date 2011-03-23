@@ -1,8 +1,8 @@
 #lang racket/base
 
-(require racket/class
-         racket/contract
-         racket/match)
+(require racket/contract
+         racket/match
+         racket/file)
 
 ;; A resource is something that should be associated to a program, such
 ;; as source code, HTML, images, and music files.
@@ -13,10 +13,19 @@
 
 ;; resource-save!: resource path -> void
 ;; Write out the resource to disk.
-(define (resource-save! a-resource a-root-path)
-  (call-with-output-file (build-path a-root-path (resource-relative-path a-resource))
-    (lambda (op)
-      (write-bytes (resource-bytes a-resource) op))))
+(define (resource-save! a-resource a-base-path #:exists exists)
+  (let ([full-path (resource-absolute-path a-resource a-base-path)])
+    (let-values ([(dir file is-dir?) (split-path full-path)])
+      (unless (directory-exists? dir)
+        (make-directory* dir))
+      (call-with-output-file full-path
+        (lambda (op)
+          (write-bytes (resource-bytes a-resource) op))
+        #:exists exists))))
+
+
+(define (resource-absolute-path a-resource a-base-path)
+  (build-path a-base-path (resource-relative-path a-resource)))
 
 
 ;; resource->sexp: resource -> s-expression
@@ -42,4 +51,5 @@
                                     [bytes bytes?])]
                   [resource->sexp (resource? . -> . any)]
                   [sexp->resource (any/c . -> . resource?)]
-                  [resource-save! (resource? path-string? . -> . any)])
+                  [resource-save! (resource? path-string? #:exists symbol? . -> . any)]
+                  [resource-absolute-path (resource? path-string? . -> . path?)])

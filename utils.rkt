@@ -1,6 +1,7 @@
 #lang racket/base
 (require racket/contract
          racket/file
+         racket/port
 	 file/gzip
          (prefix-in 19: srfi/19))
 
@@ -9,7 +10,6 @@
                   [upper-camel-case (string? . -> . string?)]
                   [make-temporary-directory (() (#:parent-directory path?) . ->* . path?)]
                   [get-file-bytes (path? . -> . bytes?)]
-                  [get-input-port-bytes (input-port? . -> . bytes?)]
                   [now-date-string (-> string?)]
                   [string->date (string? . -> . date?)]
                   [with-temporary-directory ((path? . -> . any) . -> . any)]
@@ -52,19 +52,9 @@
 ;; get-file-bytes: path -> bytes
 ;; Sucks all the bytes out of a file
 (define (get-file-bytes a-path)
-  (call-with-input-file a-path
-    get-input-port-bytes))
+  (call-with-input-file* a-path
+    port->bytes))
 
-;; get-input-port-bytes: input-port -> bytes
-(define (get-input-port-bytes ip)
-  (let loop ([b (bytes)])
-    (let ([chunk (read-bytes 8196 ip)])
-      (cond
-        [(eof-object? chunk)
-         b]
-        [else
-         (loop (bytes-append b chunk))]))))
-  
 
 
 

@@ -6,7 +6,6 @@
          racket/file
          web-server/servlet
          web-server/servlet-env
-         net/uri-codec
          xml
          "resource.rkt"
          "utils.rkt"
@@ -32,7 +31,7 @@
 
 ;; start: request -> response
 (define (start req)
-  (with-handlers ([exn:fail? handle-unexpected-error])
+  (with-handlers (#;[exn:fail? handle-unexpected-error])
     (let* ([name (parse-program-name req)]
            [permissions (parse-permissions req)]
            [resources (parse-resources req)]
@@ -40,15 +39,17 @@
       ;; (write-to-access-log! req (resources->bytes resources))
       (cond
         [(and name (not (empty? resources)))
-         (make-package-response name (builder name resources))]
+         (make-package-response 
+          name 
+          (builder name permissions resources))]
         [else
          (error-no-program)]))))
 
 
-;; select-builder: request -> (String (listof resource) -> bytes)
+;; select-builder: request -> (String (listof string) (listof resource) -> bytes)
 (define (select-builder req)
   (let ([error-builder      
-         (lambda (name resources)
+         (lambda (name permissions resources)
            (error 'builder "Unknown builder"))])
     (cond
       [(exists-binding? 'type (request-bindings req))
@@ -86,14 +87,11 @@
      
 
 ;; parse-resources: bindings -> (listof resource)
-(define (parse-resources bindings)
-  (cond [(exists-binding? 'resource bindings)
+(define (parse-resources req)
+  (cond [(exists-binding? 'resource (request-bindings req))
          (map (lambda (val)
-                (let ([name&bytes (read (open-input-string val))])
-                  (log-debug (format "Reading resource ~s" (first name&bytes)))
-                  (make-resource (first name&bytes)
-                                 (second name&bytes))))
-              (extract-bindings 'resource bindings))]
+                (sexp->resource (read (open-input-string val))))
+              (extract-bindings 'resource (request-bindings req)))]
         [else
          empty]))
 
@@ -173,7 +171,7 @@
                                       (LOGFILE-PATH (build-path logfile-dir "access.log"))])
 
 
-(current-access-logger (make-logger (LOGFILE-PATH)))
+#;(current-access-logger (make-logger (LOGFILE-PATH)))
 (serve/servlet start
                #:launch-browser? #f
                #:quit? #f

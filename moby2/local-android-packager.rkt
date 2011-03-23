@@ -50,11 +50,11 @@
          [classname (upper-camel-case normal-name)]
          [package (string-append "plt.moby." classname)])
 
-    
     ;; Write out all the resources into the android package's assets.
     (for ([r resources])
-      (resource-save! r (build-path dest "assets")))
-
+      (resource-save! r (build-path dest "assets")
+                      #:exists 'replace))
+    
     
     ;; Write out the icon
     (make-directory* (build-path dest "res" "drawable"))
