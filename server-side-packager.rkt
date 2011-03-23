@@ -22,6 +22,7 @@
 ;;
 ;; Parameters
 ;;
+;;     t : string.  type.
 ;;     n : string.  default "program" name.
 ;;     ps : string.  Repeatable.  Permission
 ;;     r : resource-sexp-string.  Repeatable
@@ -56,8 +57,8 @@
          (lambda (name permissions resources)
            (error 'builder "Unknown builder"))])
     (cond
-      [(exists-binding? 'type (request-bindings req))
-       (let ([type (extract-binding/single 'type (request-bindings req))])
+      [(exists-binding? 't (request-bindings req))
+       (let ([type (extract-binding/single 't (request-bindings req))])
          (cond
            [(string=? type "moby2")
             (lambda (name permissions resources)
