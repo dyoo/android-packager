@@ -86,7 +86,7 @@
 (define (parse-permissions req)
   (cond
     [(exists-binding? 'ps (request-bindings req))
-     (extract-bindings 'ps req)]
+     (extract-bindings 'ps (request-bindings req))]
     [else
      '()]))
      
