@@ -25,7 +25,7 @@
 
 
 (define (resource-absolute-path a-resource a-base-path)
-  (build-path a-base-path (resource-relative-path a-resource)))
+  (build-path a-base-path (unix-path-string->path (resource-relative-path a-resource))))
 
 
 ;; resource->sexp: resource -> s-expression
@@ -43,7 +43,10 @@
      (make-resource name bytes)]))
 
 
-
+(define (unix-path-string->path a-path)
+  (let ([chunks (regexp-split "[/\\]" a-path)])
+    (apply build-path chunks)))
+  
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
