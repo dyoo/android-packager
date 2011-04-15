@@ -5,28 +5,22 @@
          racket/contract
          racket/list
          (only-in xml xexpr->string)
-         
-         "../../js-vm/private/module-record.rkt"
-         "../../js-vm/private/compile-moby-module.rkt"
-         "../../js-vm/private/write-module-records.rkt"
-         "../../js-vm/private/write-runtime.rkt"
-         
-         "android-permission.rkt"
          "../config.rkt" 
          "../utils.rkt"
          "../compile-helpers.rkt")
 
 
 (define-runtime-path phonegap-path "../../support/phonegap-fork/android-1.5")
-(define-runtime-path icon-path "../../support/icons/icon.png")
-(define-runtime-path javascript-support-path "../../support/js")
+(define-runtime-path icon-path "icon.png")
 
 
 ;; build-android-package: string path -> bytes
 ;; Builds the android package with the given program name and path, producing
 ;; its apk contents as bytes.
 (define (build-android-package program-name program-path)
-  (with-temporary-directory
+  
+  (void)
+  #;(with-temporary-directory
    (lambda (dir)
      (build-android-package-in-path program-name
                                     program-path
@@ -298,7 +292,6 @@ EOF
             (android:versionCode ,version-code)
             (android:versionName ,version-name))
            
-           ;; Building for Android 1.5.
            (uses-sdk ((android:minSdkVersion "3")))
            
            ,@(map (lambda (p)
@@ -326,8 +319,7 @@ EOF
                        (android:configChanges
                         "keyboardHidden|orientation"))
                       (action ((android:name "android.intent.action.PICK")))
-                      (category ((android:name
-                                  "android.intent.category.DEFAULT"))))))])
+                      (category ((android:name "android.intent.category.DEFAULT"))))))])
     
     (xexpr->string AndroidManifest.xml)))
 
@@ -378,30 +370,4 @@ EOF
 
 
 (provide/contract [build-android-package 
-                   (string? path-string? . -> . bytes?)]
-                  [build-android-package-in-path
-                   (string? path-string? path-string? . -> . any)]
-
-                  ;; The following will be used when the compiler
-                  ;; isn't present on the local machine: we can 
-                  ;; still delegate the actual compilation off to a 
-                  ;; separate compilation server.
-                  
-                  
-                  [prepare-android-package-src-structure
-                   (string? (listof string?) path-string? . -> . any)]
-                  
-                  [write-assets
-                   (path? (listof module-record?) path? . -> . any)]
-
-                  [write-local.properties
-                   (path-string? . -> . any)]
-
-                  
-                  [get-apk-in-dest
-                   (path? . -> . bytes?)]
-                  
-                  
-                  [module-records-android-permissions
-                   ((listof module-record?) . -> . (listof string?))]
-                  )
+                   (string? (listof resource?) #:permissions (listof String?) . -> . bytes?)])

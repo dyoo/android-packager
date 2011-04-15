@@ -176,6 +176,7 @@
             
             (activity ((android:name ,activity-class)
                        (android:label ,name)
+                       (android:screenOrientation "portrait")
                        (android:configChanges
                         "keyboardHidden|orientation"))
                       (intent-filter 
@@ -198,3 +199,9 @@
 
 (provide/contract [build-android-package 
                    (string? (listof resource?) #:permissions (listof string?) . -> . bytes?)])
+
+
+
+
+
+
