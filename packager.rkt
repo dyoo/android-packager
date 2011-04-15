@@ -5,26 +5,31 @@
          racket/contract
          racket/list
          (only-in xml xexpr->string)
-         "../utils.rkt"
-         "../resource.rkt"
-         "../run-ant.rkt"
-         "../config.rkt")
+         "utils.rkt"
+         "resource.rkt"
+         "run-ant.rkt"
+         "config.rkt"
+         (for-syntax racket/base))
 
 
-(define-runtime-path phonegap-path "../phonegap/moby2/android-1.5")
+(define-runtime-path moby2-phonegap-path (build-path "phonegap" "moby2" "android-1.5"))
+(define-runtime-path moby3-phonegap-path (build-path "phonegap" "moby3" "android-1.5"))
+
 (define-runtime-path icon-path "icon.png")
 
 
 ;; build-android-package: string (listof resources) #:permissions -> bytes
 (define (build-android-package program-name resources 
-                               #:permissions permissions)
+                               #:permissions (permissions '())
+                               #:phonegap-path (phonegap-path moby2-phonegap-path))
   (with-temporary-directory
    (lambda (dir)
      (let ([dest (simplify-path (build-path dir program-name))])
        (build-android-package-in-path program-name
                                       resources
                                       permissions
-                                      dest)
+                                      dest
+                                      phonegap-path)
               
        (get-file-bytes 
         (first (find-files (lambda (a-path)
@@ -36,7 +41,8 @@
 
 ;; FIXME: name must be cleaned up: it must not have any non-alphanumeric/whitespace, or
 ;; else bad things happen.
-(define (build-android-package-in-path name resources permissions dest) 
+(define (build-android-package-in-path name resources permissions dest
+                                       moby2-phonegap-path) 
   (unless (file-exists? (current-ant-bin-path))
     (error 'build-android-package-in-path
            "The Apache ant binary appears to be missing from the current PATH."))
@@ -45,7 +51,7 @@
            "The Android SDK could not be found."))
   
   (make-directory* dest)
-  (copy-directory/files* phonegap-path dest)
+  (copy-directory/files* moby2-phonegap-path dest)
   (let* ([normal-name (normalize-name name)]
          [classname (upper-camel-case normal-name)]
          [package (string-append "plt.moby." classname)])
@@ -198,7 +204,10 @@
 
 
 (provide/contract [build-android-package 
-                   (string? (listof resource?) #:permissions (listof string?) . -> . bytes?)])
+                   ((string? (listof resource?)) 
+                    (#:permissions (listof string?)
+                                   #:phonegap-path path?)
+                    . ->* . bytes?)])
 
 
 

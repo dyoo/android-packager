@@ -9,7 +9,14 @@
          xml
          "resource.rkt"
          "utils.rkt"
-         (prefix-in moby2: "moby2/local-android-packager.rkt"))
+         "packager.rkt"
+         (for-syntax racket/base))
+
+
+
+
+(define-runtime-path moby2-phonegap-path (build-path "phonegap" "moby2" "android-1.5"))
+(define-runtime-path moby3-phonegap-path (build-path "phonegap" "moby3" "android-1.5"))
 
 
 ;; This is a servlet that compiles packages to Android.
@@ -62,9 +69,14 @@
          (cond
            [(string=? type "moby2")
             (lambda (name permissions resources)
-              (moby2:build-android-package name resources #:permissions permissions))]
-           #;[(string=? type "moby3")
-              (error 'fixme)]
+              (build-android-package name resources 
+                                     #:permissions permissions
+                                     #:phonegap-path moby2-phonegap-path))]
+           [(string=? type "moby3")
+            (lambda (name permissions resources)
+              (build-android-package name resources 
+                                     #:permissions permissions
+                                     #:phonegap-path moby3-phonegap-path))]
            [else
             error-builder]))]
       [else
