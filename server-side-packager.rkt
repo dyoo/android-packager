@@ -6,6 +6,7 @@
          racket/file
          web-server/servlet
          web-server/servlet-env
+	 web-server/http/response-structs
          xml
          "resource.rkt"
          "utils.rkt"
@@ -128,7 +129,7 @@
         [else
          a-name])))
   
-  (make-response/full
+  (response/full
    200
    #"OK"(current-seconds)
    #"application/vnd.android.package-archive"
@@ -143,7 +144,7 @@
 
 ;; error-no-program: -> response
 (define (error-no-program)
-  (make-response/full
+  (response/full
    400
    #"Bad Request"
    (current-seconds)
@@ -158,7 +159,7 @@
 
 ;; handle-unexpected-error: exn:fail -> response
 (define (handle-unexpected-error exn)
-   (make-response/full
+   (response/full
      400
      #"Bad Request"
      (current-seconds)
