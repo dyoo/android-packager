@@ -4,6 +4,8 @@
          racket/cmdline
          racket/list
          racket/file
+         file/gunzip
+         net/uri-codec
          web-server/servlet
          web-server/servlet-env
 	 web-server/http/response-structs
@@ -44,12 +46,12 @@
 
 ;; start: request -> response
 (define (start req)
-  (with-handlers (#;[exn:fail? handle-unexpected-error])
-    (let* ([name (parse-program-name req)]
-           [permissions (parse-permissions req)]
-           [resources (parse-resources req)]
-           [builder (select-builder req)])
-      ;; (write-to-access-log! req (resources->bytes resources))
+  (with-handlers ([exn:fail? handle-unexpected-error])
+    (let* ([bindings (uncompress-bindings req)]
+           [name (parse-program-name bindings)]
+           [permissions (parse-permissions bindings)]
+           [resources (parse-resources bindings)]
+           [builder (select-builder bindings)])
       (cond
         [(and name (not (empty? resources)))
          (make-package-response 
@@ -59,14 +61,48 @@
          (error-no-program)]))))
 
 
-;; select-builder: request -> (String (listof string) (listof resource) -> bytes)
-(define (select-builder req)
+
+;; bindings may be compressed in the raw POST data, in which case
+;; we uncompress first.
+(define (uncompress-bindings req)
+  (cond
+    [(url-mentions-gzip? (request-uri req))
+     (let ([bytes (request-post-data/raw req)]
+           [uncompressed (open-output-string)])
+       (gunzip-through-ports (open-input-bytes bytes)
+                             uncompressed)
+       (form-urlencoded->alist (get-output-string uncompressed)))]
+    [else
+     (request-bindings req)]))
+
+
+
+
+(define (url-mentions-gzip? a-url)
+  (let loop ([path-chunks (url-path a-url)])
+    (cond
+      [(empty? path-chunks)
+       #f]
+      [else
+       (let ([a-path-param (first path-chunks)])
+         (cond
+           [(and (string? (path/param-path a-path-param))
+                 (string=? (path/param-path a-path-param)
+                           "gzip"))
+            #t]
+           [else
+            (loop (rest path-chunks))]))])))
+
+
+
+;; select-builder: bindings -> (String (listof string) (listof resource) -> bytes)
+(define (select-builder bindings)
   (let ([error-builder      
          (lambda (name permissions resources)
            (error 'builder "Unknown builder"))])
     (cond
-      [(exists-binding? 't (request-bindings req))
-       (let ([type (extract-binding/single 't (request-bindings req))])
+      [(exists-binding? 't bindings)
+       (let ([type (extract-binding/single 't bindings)])
          (cond
            [(string=? type "moby2")
             (lambda (name permissions resources)
@@ -84,32 +120,32 @@
        error-builder])))
 
 
-;; parse-name: request -> string
+;; parse-name: bindings -> string
 ;; Extracts the name from the request
-(define (parse-program-name req)
+(define (parse-program-name bindings)
   (cond
-    [(exists-binding? 'n (request-bindings req))
-     (extract-binding/single 'n (request-bindings req))]
+    [(exists-binding? 'n bindings)
+     (extract-binding/single 'n bindings)]
     [else
      "program"]))
 
 
-;; parse-permissions: request -> (listof string)
+;; parse-permissions: bindings -> (listof string)
 ;; Produces the list of Android permissions required by this package.
-(define (parse-permissions req)
+(define (parse-permissions bindings)
   (cond
-    [(exists-binding? 'ps (request-bindings req))
-     (extract-bindings 'ps (request-bindings req))]
+    [(exists-binding? 'ps bindings)
+     (extract-bindings 'ps bindings)]
     [else
      '()]))
      
 
 ;; parse-resources: bindings -> (listof resource)
-(define (parse-resources req)
-  (cond [(exists-binding? 'r (request-bindings req))
+(define (parse-resources bindings)
+  (cond [(exists-binding? 'r bindings)
          (map (lambda (val)
                 (sexp->resource (read (open-input-string val))))
-              (extract-bindings 'r (request-bindings req)))]
+              (extract-bindings 'r bindings))]
         [else
          empty]))
 
