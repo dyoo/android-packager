@@ -4,6 +4,7 @@
          racket/cmdline
          racket/list
          racket/file
+         racket/async-channel
          file/gunzip
          net/uri-codec
          web-server/servlet
@@ -37,11 +38,53 @@
 ;;     ps : string.  Repeatable.  Permission
 ;;     r : resource-sexp-string.  Repeatable
 
-
+;; Optionally
+;;     cb : callback.  URL.  If defined, then queues off a compilation request.
+;;        The system will compile the package when it's idle, and then send the result of
+;;        the compilation as POST data to the callback url.
 (define-runtime-path HTDOCS-PATH "htdocs")
 (define-runtime-path LOG-PATH "logs")
 
 (define current-access-logger (make-parameter #f))
+
+
+
+
+;; FIXME: there's an issue here because this makes the server stateful.
+;; We may want to push the content of these jobs to disk, in case the server
+;; dies.
+(define-struct job (builder name permissions resources callback))
+
+
+(define-syntax (ignoring-errors stx)
+  (syntax-case stx ()
+    [(_ body ...)
+     (syntax/loc stx
+       (with-handlers ([void (lambda (exn)
+                               (fprintf (current-error-port) "~e" exn))])
+         body ...))]))
+     
+
+
+(define job-channel (make-async-channel))
+(define background-compiler-thread
+  (thread 
+   (lambda ()
+     (let loop ()
+       (printf "Background compiler waiting for task.\n")
+       (let ([job (sync job-channel)])
+         (ignoring-errors 
+          (let ([package ((job-builder job)
+                          (job-name job)
+                          (job-permissions job)
+                          (job-resources job))])
+            (printf "Package built.  Sending package back to ~s\n"
+                    (job-callback job))
+            ;; send the package back to the callback url.
+            (post-pure-port (string->url (job-callback job)) package))))
+       (loop)))))
+
+
 
 
 ;; start: request -> response
@@ -51,15 +94,25 @@
            [name (parse-program-name bindings)]
            [permissions (parse-permissions bindings)]
            [resources (parse-resources bindings)]
-           [builder (select-builder bindings)])
+           [builder (select-builder bindings)]
+           [callback-url (parse-callback-url bindings)])
       (cond
         [(and name (not (empty? resources)))
-         (make-package-response 
-          name 
-          (builder name permissions resources))]
+         (cond [(string? callback-url)
+                (let ([job (make-job builder name permissions resources callback-url)])
+                  (schedule-job! job)
+                  (make-job-running-response job))]
+
+               [else
+                (make-package-response 
+                 name 
+                 (builder name permissions resources))])]
         [else
          (error-no-program)]))))
 
+
+(define (schedule-job! job)
+  (async-channel-put job-channel job))
 
 
 ;; bindings may be compressed in the raw POST data, in which case
@@ -76,6 +129,15 @@
      (request-bindings req)]))
 
 
+;; parse-callback-url: bindings -> (U #f string)
+;; Either we get #f, and act synchronously, or we get a callback and
+;; act asynchronously.
+(define (parse-callback-url bindings)
+  (cond
+    [(exists-binding? 'cb bindings)
+     (extract-binding/single 'cb bindings)]
+    [else
+     #f]))
 
 
 (define (url-mentions-gzip? a-url)
@@ -176,6 +238,16 @@
    (list package-bytes)))
 
 
+(define (make-job-running-response job)
+  (response/xexpr
+   '(html
+     (head (title "Job queued"))
+     (body (p "Job queued.  Program " (i ,(job-name job))
+              "will be compiled and its result be sent back to "
+              (tt ,(job-callback-url job)) 
+              ".")))))
+           
+
 
 
 ;; error-no-program: -> response
@@ -214,18 +286,17 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (define PORT (make-parameter 8080))
-(define LOGFILE-PATH (make-parameter (build-path LOG-PATH "access.log")))
-(unless (directory-exists? LOG-PATH)
-  (make-directory* LOG-PATH))
+#;(define LOGFILE-PATH (make-parameter (build-path LOG-PATH "access.log")))
+#;(unless (directory-exists? LOG-PATH)
+    (make-directory* LOG-PATH))
 
 (command-line #:once-each 
               [("-p" "--port") port "Use port for web server"
                                (PORT (string->number port))]
-              [("-L" "--logfile-dir") logfile-dir "Use the directory to write access.log"
+              #;[("-L" "--logfile-dir") logfile-dir "Use the directory to write access.log"
                                       (LOGFILE-PATH (build-path logfile-dir "access.log"))])
 
 
-#;(current-access-logger (make-logger (LOGFILE-PATH)))
 (serve/servlet start
                #:launch-browser? #f
                #:quit? #f
