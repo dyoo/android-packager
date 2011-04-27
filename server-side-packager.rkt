@@ -6,7 +6,7 @@
          racket/file
          racket/async-channel
          file/gunzip
-         net/uri-codec
+         "uri-codec.rkt" ;; net/uri-codec
          web-server/servlet
          web-server/servlet-env
 	 web-server/http/response-structs
@@ -60,7 +60,7 @@
   (syntax-case stx ()
     [(_ body ...)
      (syntax/loc stx
-       (with-handlers ([void (lambda (exn)
+       (with-handlers (#;[void (lambda (exn)
                                (fprintf (current-error-port) "~e" exn))])
          body ...))]))
      
@@ -74,6 +74,7 @@
        (printf "Background compiler waiting for task.\n")
        (let ([job (sync job-channel)])
          (ignoring-errors 
+          (printf "Building new job ~s...\n" (job-name job))
           (let ([package ((job-builder job)
                           (job-name job)
                           (job-permissions job)
@@ -81,7 +82,7 @@
             (printf "Package built.  Sending package back to ~s\n"
                     (job-callback job))
             ;; send the package back to the callback url.
-            (post-pure-port (string->url (job-callback job)) package))))
+            #;(post-pure-port (string->url (job-callback job)) package))))
        (loop)))))
 
 
@@ -89,20 +90,19 @@
 
 ;; start: request -> response
 (define (start req)
-  (with-handlers ([exn:fail? handle-unexpected-error])
-    (let* ([bindings (uncompress-bindings req)]
-           [name (parse-program-name bindings)]
-           [permissions (parse-permissions bindings)]
-           [resources (parse-resources bindings)]
-           [builder (select-builder bindings)]
-           [callback-url (parse-callback-url bindings)])
+  (with-handlers (#;[exn:fail? handle-unexpected-error])
+    (let* ([bindings (time (uncompress-bindings req))]
+           [name (time (parse-program-name bindings))]
+           [permissions (time (parse-permissions bindings))]
+           [resources (time (parse-resources bindings))]
+           [builder (time (select-builder bindings))]
+           [callback-url (time (parse-callback-url bindings))])
       (cond
         [(and name (not (empty? resources)))
          (cond [(string? callback-url)
                 (let ([job (make-job builder name permissions resources callback-url)])
                   (schedule-job! job)
                   (make-job-running-response job))]
-
                [else
                 (make-package-response 
                  name 
@@ -122,8 +122,7 @@
     [(url-mentions-gzip? (request-uri req))
      (let ([bytes (request-post-data/raw req)]
            [uncompressed (open-output-string)])
-       (gunzip-through-ports (open-input-bytes bytes)
-                             uncompressed)
+       (gunzip-through-ports (open-input-bytes bytes) uncompressed)
        (form-urlencoded->alist (get-output-string uncompressed)))]
     [else
      (request-bindings req)]))

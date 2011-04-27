@@ -36,11 +36,17 @@
 
 ;; sexp->resource: s-expression -> resource
 (define (sexp->resource resource-sexp)
+  (printf "sexp->resource\n")
   (match resource-sexp
     [(list 'resource 
            (and name (? string?))
            (and bytes (? bytes?)))
-     (make-resource name bytes)]))
+     (make-resource name bytes)]
+
+    [(list 'resource 
+           (and name (? string?))
+           (and bytes-str (? string?)))
+     (make-resource name (string->bytes/utf-8 bytes))]))
 
 
 (define (unix-path-string->path a-path)
