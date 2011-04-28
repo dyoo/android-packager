@@ -213,11 +213,13 @@
 ;; parse-resource-value: string -> resource
 (define (parse-resource-value val)
   (cond
-   [(and (> (string-length val) 0)
-	 (char=? (string-ref val 0) #\{))
-    (json-string->resource val)]
-   [else
-    (sexp->resource (read (open-input-string val)))]))
+    [(and (> (string-length val) 0)
+          (char=? (string-ref val 0) #\{))
+     (json-string->resource val)]
+    [else
+     (sexp->resource (read (open-input-string val)))]))
+
+
 
 
 
