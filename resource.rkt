@@ -2,7 +2,8 @@
 
 (require racket/contract
          racket/match
-         racket/file)
+         racket/file
+	 "json.rkt")
 
 ;; A resource is something that should be associated to a program, such
 ;; as source code, HTML, images, and music files.
@@ -36,7 +37,6 @@
 
 ;; sexp->resource: s-expression -> resource
 (define (sexp->resource resource-sexp)
-  (printf "sexp->resource\n")
   (match resource-sexp
     [(list 'resource 
            (and name (? string?))
@@ -47,6 +47,14 @@
            (and name (? string?))
            (and bytes-str (? string?)))
      (make-resource name (string->bytes/utf-8 bytes))]))
+
+
+;; json-string->resource: string -> resource
+(define (json-string->resource resource-string)
+  (let ([obj (read-json (open-input-string resource-string))])
+    (make-resource (hash-ref obj 'path)
+		   (string->bytes/utf-8 (hash-ref obj 'bytes)))))
+
 
 
 (define (unix-path-string->path a-path)
@@ -60,5 +68,6 @@
                                     [bytes bytes?])]
                   [resource->sexp (resource? . -> . any)]
                   [sexp->resource (any/c . -> . resource?)]
+                  [json-string->resource (string? . -> . resource?)]
                   [resource-save! (resource? path-string? #:exists symbol? . -> . any)]
                   [resource-absolute-path (resource? path-string? . -> . path?)])

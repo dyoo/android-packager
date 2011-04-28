@@ -204,11 +204,20 @@
 ;; parse-resources: bindings -> (listof resource)
 (define (parse-resources bindings)
   (cond [(exists-binding? 'r bindings)
-         (map (lambda (val)
-                (sexp->resource (read (open-input-string val))))
+         (map parse-resource-value
               (extract-bindings 'r bindings))]
         [else
          empty]))
+
+
+;; parse-resource-value: string -> resource
+(define (parse-resource-value val)
+  (cond
+   [(and (> (string-length val) 0)
+	 (char=? (string-ref val 0) #\{))
+    (json-string->resource val)]
+   [else
+    (sexp->resource (read (open-input-string val)))]))
 
 
 
