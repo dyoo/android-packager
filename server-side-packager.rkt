@@ -82,7 +82,7 @@
             (printf "Package built.  Sending package back to ~s\n"
                     (job-callback job))
             ;; send the package back to the callback url.
-            #;(post-pure-port (string->url (job-callback job)) package))))
+	    (post-pure-port (string->url (job-callback job)) package))))
        (loop)))))
 
 
