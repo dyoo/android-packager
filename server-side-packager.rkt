@@ -3,7 +3,6 @@
 (require racket/runtime-path
          racket/cmdline
          racket/list
-         racket/file
          racket/async-channel
          file/gunzip
          "uri-codec.rkt" ;; net/uri-codec
@@ -14,6 +13,7 @@
          "resource.rkt"
          "utils.rkt"
          "packager.rkt"
+         (prefix-in jobdb: "jobs.rkt")
          (for-syntax racket/base))
 
 
@@ -53,7 +53,8 @@
 ;; FIXME: there's an issue here because this makes the server stateful.
 ;; We may want to push the content of these jobs to disk, in case the server
 ;; dies.
-(define-struct job (builder name permissions resources callback))
+(define-struct job (builder name permissions resources callback
+                            id))
 
 
 (define-syntax (ignoring-errors stx)
@@ -82,7 +83,8 @@
             (printf "Package built.  Sending package back to ~s\n"
                     (job-callback job))
             ;; send the package back to the callback url.
-	    (post-pure-port (string->url (job-callback job)) package))))
+            (post-pure-port (string->url (job-callback job)) package)
+            (jobdb:mark-job-done! (jobdb:get-job (job-id job))))))
        (loop)))))
 
 
@@ -90,43 +92,66 @@
 
 ;; start: request -> response
 (define (start req)
-  (with-handlers (#;[exn:fail? handle-unexpected-error])
-    (let* ([bindings (time (uncompress-bindings req))]
-           [name (time (parse-program-name bindings))]
-           [permissions (time (parse-permissions bindings))]
-           [resources (time (parse-resources bindings))]
-           [builder (time (select-builder bindings))]
-           [callback-url (time (parse-callback-url bindings))])
-      (cond
-        [(and name (not (empty? resources)))
-         (cond [(string? callback-url)
-                (let ([job (make-job builder name permissions resources callback-url)])
-                  (schedule-job! job)
-                  (make-job-running-response job))]
+  (with-handlers ([exn:fail? handle-unexpected-error])
+    (cond [(url-mentions-gzip? (request-uri req))
+           (let ([raw-data (request-post-data/raw req)])
+             (thread (lambda () 
+                       (let ([a-job (jobdb:new-job raw-data)])
+                         (handle-job a-job)))))
+           (make-job-scheduled-response)]
+          
+          [else
+           (let* ([bindings (time (uncompress-bindings req))]
+                  [name (time (parse-program-name bindings))]
+                  [permissions (time (parse-permissions bindings))]
+                  [resources (time (parse-resources bindings))]
+                  [builder (time (select-builder bindings))]
+                  [callback-url (time (parse-callback-url bindings))])
+             (cond
+               [(and name (not (empty? resources)))
+                (cond [(string? callback-url)
+                       (let ([job (make-job builder name permissions resources callback-url)])
+                         (schedule-job! job))
+                       (make-job-scheduled-response)]
+                      [else
+                       (make-package-response 
+                        name 
+                        (builder name permissions resources))])]
                [else
-                (make-package-response 
-                 name 
-                 (builder name permissions resources))])]
-        [else
-         (error-no-program)]))))
+                (error-no-program)]))])))
 
 
+(define (handle-job dbjob)
+  (let* ([bindings (uncompress-bindings (jobdb:job-val dbjob))]
+         [name (parse-program-name bindings)]
+         [permissions (parse-permissions bindings)]
+         [resources (parse-resources bindings)]
+         [builder (select-builder bindings)]
+         [callback-url (parse-callback-url bindings)])
+    (cond
+      [(and name (not (empty? resources)))
+       (cond [(string? callback-url)
+              (let ([job (make-job builder name permissions resources callback-url
+                                   (jobdb:job-id dbjob))])
+                (schedule-job! job))]
+             [else
+              (void)])]
+      [else
+       (void)])))
+    
+    
 (define (schedule-job! job)
   (async-channel-put job-channel job))
 
 
 ;; bindings may be compressed in the raw POST data, in which case
 ;; we uncompress first.
-(define (uncompress-bindings req)
-  (cond
-    [(url-mentions-gzip? (request-uri req))
-     (let ([bytes (request-post-data/raw req)]
-           [uncompressed (open-output-string)])
-       (gunzip-through-ports (open-input-bytes bytes) uncompressed)
-       (form-urlencoded->alist (get-output-string uncompressed)))]
-    [else
-     (request-bindings req)]))
+(define (uncompress-bindings bytes)
+  (let ([uncompressed (open-output-string)])
+    (gunzip-through-ports (open-input-bytes bytes) uncompressed)
+    (form-urlencoded->alist (get-output-string uncompressed))))
 
+    
 
 ;; parse-callback-url: bindings -> (U #f string)
 ;; Either we get #f, and act synchronously, or we get a callback and
@@ -248,14 +273,11 @@
    (list package-bytes)))
 
 
-(define (make-job-running-response job)
+(define (make-job-scheduled-response)
   (response/xexpr
    '(html
      (head (title "Job queued"))
-     (body (p "Job queued.  Program " (i ,(job-name job))
-              "will be compiled and its result be sent back to "
-              (tt ,(job-callback-url job)) 
-              ".")))))
+     (body (p "Job queued")))))
            
 
 
@@ -306,6 +328,8 @@
               #;[("-L" "--logfile-dir") logfile-dir "Use the directory to write access.log"
                                       (LOGFILE-PATH (build-path logfile-dir "access.log"))])
 
+
+(for-each handle-job (jobdb:get-pending-jobs))
 
 (serve/servlet start
                #:launch-browser? #f
