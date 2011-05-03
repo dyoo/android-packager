@@ -35,7 +35,7 @@
 ;;
 ;;     t : string.  type.
 ;;     n : string.  default "program" name.
-;;     ps : string.  Repeatable.  Permission
+;;     p : string.  Repeatable.  Permission
 ;;     r : resource-sexp-string.  Repeatable
 
 ;; Optionally
@@ -220,8 +220,8 @@
 ;; Produces the list of Android permissions required by this package.
 (define (parse-permissions bindings)
   (cond
-    [(exists-binding? 'ps bindings)
-     (extract-bindings 'ps bindings)]
+    [(exists-binding? 'p bindings)
+     (extract-bindings 'p bindings)]
     [else
      '()]))
      
