@@ -49,14 +49,6 @@
 
 
 
-
-;; FIXME: there's an issue here because this makes the server stateful.
-;; We may want to push the content of these jobs to disk, in case the server
-;; dies.
-(define-struct job (builder name permissions resources callback
-                            id))
-
-
 (define-syntax (ignoring-errors stx)
   (syntax-case stx ()
     [(_ body ...)
@@ -67,78 +59,80 @@
      
 
 
+
+;; start: request -> response
+;; The web server will watch for requests and jobs.  Requests that are gzip
+;; encoded are treated as asynchronous job requests.
+(define (start req)
+  (with-handlers ([exn:fail? handle-unexpected-error])
+    (cond [(url-mentions-gzip? (request-uri req))
+	   (handle-asynchronous-request req)]
+          
+          [else
+	   (handle-synchronous-request req)])))
+
+
+(define (handle-asynchronous-request req)
+  (let* ([raw-data (request-post-data/raw req)]
+	 [a-job (jobdb:new-job raw-data)])
+    (schedule-job! a-job)
+    (make-job-scheduled-response)))
+
+
+(define (handle-synchronous-request req)
+  (let* ([bindings (time (uncompress-bindings req))]
+	 [name (time (parse-program-name bindings))]
+	 [permissions (time (parse-permissions bindings))]
+	 [resources (time (parse-resources bindings))]
+	 [builder (time (select-builder bindings))]
+	 [callback-url (time (parse-callback-url bindings))])
+    (cond
+     [(and name (not (empty? resources)))
+      (make-package-response 
+       name 
+       (builder name permissions resources))]
+     [else
+      (error-no-program)])))
+
+
+
+
+
 (define job-channel (make-async-channel))
 (define background-compiler-thread
   (thread 
    (lambda ()
      (let loop ()
-       (printf "Background compiler waiting for task.\n")
        (let ([job (sync job-channel)])
+	 (jobdb:mark-job-start! job)
          (ignoring-errors 
-          (printf "Building new job ~s...\n" (job-name job))
-          (let ([package ((job-builder job)
-                          (job-name job)
-                          (job-permissions job)
-                          (job-resources job))])
-            (printf "Package built.  Sending package back to ~s\n"
-                    (job-callback job))
-            ;; send the package back to the callback url.
-            (post-pure-port (string->url (job-callback job)) package)
-            (jobdb:mark-job-done! (jobdb:get-job (job-id job))))))
+	  (let* ([bindings (time (jobdb:job-val job))]
+		 [name (time (parse-program-name bindings))]
+		 [permissions (time (parse-permissions bindings))]
+		 [resources (time (parse-resources bindings))]
+		 [builder (time (select-builder bindings))]
+		 [callback-url (time (parse-callback-url bindings))])
+	    (run-job builder
+		     name
+		     permissions
+		     resources
+		     callback-url
+		     (jobdb:job-id job))
+	    (jobdb:mark-job-end! job))))
        (loop)))))
 
 
+(define (run-job builder name permissions resources callback id)
+  #;(printf "Building new job ~s...\n" name)
+  (let ([package (builder name permissions resources)])
+    #;(printf "Package built.  Sending package back to ~s\n"
+              callback)
+    ;; send the package back to the callback url.
+    (post-pure-port (string->url callback) package)
+    (jobdb:mark-job-done! (jobdb:get-job id))))
 
 
-;; start: request -> response
-(define (start req)
-  (with-handlers ([exn:fail? handle-unexpected-error])
-    (cond [(url-mentions-gzip? (request-uri req))
-           (let ([raw-data (request-post-data/raw req)])
-             (thread (lambda () 
-                       (let ([a-job (jobdb:new-job raw-data)])
-                         (handle-job a-job)))))
-           (make-job-scheduled-response)]
-          
-          [else
-           (let* ([bindings (time (uncompress-bindings req))]
-                  [name (time (parse-program-name bindings))]
-                  [permissions (time (parse-permissions bindings))]
-                  [resources (time (parse-resources bindings))]
-                  [builder (time (select-builder bindings))]
-                  [callback-url (time (parse-callback-url bindings))])
-             (cond
-               [(and name (not (empty? resources)))
-                (cond [(string? callback-url)
-                       (let ([job (make-job builder name permissions resources callback-url)])
-                         (schedule-job! job))
-                       (make-job-scheduled-response)]
-                      [else
-                       (make-package-response 
-                        name 
-                        (builder name permissions resources))])]
-               [else
-                (error-no-program)]))])))
 
-
-(define (handle-job dbjob)
-  (let* ([bindings (uncompress-bindings (jobdb:job-val dbjob))]
-         [name (parse-program-name bindings)]
-         [permissions (parse-permissions bindings)]
-         [resources (parse-resources bindings)]
-         [builder (select-builder bindings)]
-         [callback-url (parse-callback-url bindings)])
-    (cond
-      [(and name (not (empty? resources)))
-       (cond [(string? callback-url)
-              (let ([job (make-job builder name permissions resources callback-url
-                                   (jobdb:job-id dbjob))])
-                (schedule-job! job))]
-             [else
-              (void)])]
-      [else
-       (void)])))
-    
     
 (define (schedule-job! job)
   (async-channel-put job-channel job))
@@ -329,7 +323,7 @@
                                       (LOGFILE-PATH (build-path logfile-dir "access.log"))])
 
 
-(for-each handle-job (jobdb:get-pending-jobs))
+(for-each schedule-job! (jobdb:get-pending-jobs))
 
 (serve/servlet start
                #:launch-browser? #f
