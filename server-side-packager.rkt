@@ -80,7 +80,7 @@
 
 
 (define (handle-synchronous-request req)
-  (let* ([bindings (time (uncompress-bindings req))]
+  (let* ([bindings (time (uncompress-bindings (request-post-data/raw req)))]
 	 [name (time (parse-program-name bindings))]
 	 [permissions (time (parse-permissions bindings))]
 	 [resources (time (parse-resources bindings))]
@@ -106,7 +106,7 @@
        (let ([job (sync job-channel)])
 	 (jobdb:mark-job-start! job)
          (ignoring-errors 
-	  (let* ([bindings (time (jobdb:job-val job))]
+	  (let* ([bindings (time (uncompress-bindings (jobdb:job-val job)))]
 		 [name (time (parse-program-name bindings))]
 		 [permissions (time (parse-permissions bindings))]
 		 [resources (time (parse-resources bindings))]
